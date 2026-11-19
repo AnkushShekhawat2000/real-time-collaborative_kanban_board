@@ -17,6 +17,8 @@ real-time collaborative task management application.
 - Multi-Organization
 - Multi-Tenant Architecture
 - Role-Based Access Control
+- Organization and tenant workspace selection
+- Tenant-scoped board listing and creation
 - Real-Time Collaboration
 - Drag and Drop
 - Activity Logs

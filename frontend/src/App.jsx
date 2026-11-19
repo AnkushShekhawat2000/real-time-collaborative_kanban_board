@@ -10,6 +10,8 @@ import ProtectedRoute from "./routes/ProtectedRoute.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Login from "./pages/Login.jsx";
 import Register from "./pages/Register.jsx";
+import BoardPage from "./pages/BoardPage.jsx";
+import WorkspaceLayout from "./routes/WorkspaceLayout.jsx";
 import "./App.css";
 
 function App() {
@@ -21,7 +23,10 @@ function App() {
                     <Route path="/register" element={<Register />} />
 
                     <Route element={<ProtectedRoute />}>
-                        <Route path="/dashboard" element={<Dashboard />} />
+                        <Route element={<WorkspaceLayout />}>
+                            <Route path="/dashboard" element={<Dashboard />} />
+                            <Route path="/boards/:boardId" element={<BoardPage />} />
+                        </Route>
                     </Route>
 
                     <Route path="/" element={<Navigate to="/dashboard" replace />} />
