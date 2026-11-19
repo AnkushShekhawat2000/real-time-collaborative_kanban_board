@@ -57,6 +57,12 @@ All endpoints require tenant and board access; only organization and tenant admi
 - `PATCH /api/tasks/:tenantId/:boardId/:columnId/:taskId` updates task fields and requires the current `expectedVersion`.
 - `PATCH /api/tasks/:tenantId/:boardId/:columnId/:taskId/move` moves a task to a column on the same board. The body requires `destinationColumnId`, `destinationPosition`, and the current `expectedVersion`.
 - `PATCH /api/tasks/:tenantId/:boardId/:columnId/reorder` reorders every task in a column using a `taskIds` array containing exactly those tasks.
+- `PATCH /api/tasks/:tenantId/:boardId/:columnId/:taskId/assign` assigns a task to a user who is a member of the tenant.
+- `PATCH /api/tasks/:tenantId/:boardId/:columnId/:taskId/unassign` removes the task's assignee.
 - `DELETE /api/tasks/:tenantId/:boardId/:columnId/:taskId` deletes a task.
 
-Task updates and moves increment `version`; stale `expectedVersion` values receive HTTP 409. Reordering also increments each task's version.
+Task updates increment `version`; stale `expectedVersion` values receive HTTP 409. Moving or reordering tasks increments the versions of all affected tasks.
+
+## Activity API
+
+- `GET /api/activities/:tenantId?page=1&limit=20` lists tenant activity logs. The authenticated user must have access to that tenant.

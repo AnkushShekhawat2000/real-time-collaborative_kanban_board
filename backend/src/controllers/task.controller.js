@@ -394,3 +394,97 @@ export const reorderTasksController = async (req, res) => {
         });
     }
 };
+
+export const assignTaskController = async (req, res) => {
+    try {
+        const { assigneeId } = req.body || {};
+
+        if (
+            typeof assigneeId !== "string" ||
+            !assigneeId.trim()
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Valid assigneeId is required",
+            });
+        }
+
+        const result = await taskService.assignTask({
+            taskId: req.params.taskId,
+            columnId: req.column.id,
+            tenantId: req.tenant.id,
+            assigneeId,
+        });
+
+        if (result.status === "TASK_NOT_FOUND") {
+            return res.status(404).json({
+                success: false,
+                message: "Task not found",
+            });
+        }
+
+        if (result.status === "INVALID_ASSIGNEE") {
+            return res.status(400).json({
+                success: false,
+                message: "User is not a member of this tenant",
+            });
+        }
+
+        if (result.status === "CONFLICT") {
+            return res.status(409).json({
+                success: false,
+                message: "Task changed during assignment. Refresh and retry.",
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Task assigned successfully",
+            task: result.task,
+        });
+    } catch (error) {
+        console.error("Assign task error:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to assign task",
+        });
+    }
+};
+
+export const unassignTaskController = async (req, res) => {
+    try {
+        const result = await taskService.unassignTask({
+            taskId: req.params.taskId,
+            columnId: req.column.id,
+            tenantId: req.tenant.id,
+        });
+
+        if (result.status === "TASK_NOT_FOUND") {
+            return res.status(404).json({
+                success: false,
+                message: "Task not found",
+            });
+        }
+
+        if (result.status === "CONFLICT") {
+            return res.status(409).json({
+                success: false,
+                message: "Task changed. Refresh and retry.",
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Task unassigned successfully",
+            task: result.task,
+        });
+    } catch (error) {
+        console.error("Unassign task error:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to unassign task",
+        });
+    }
+};

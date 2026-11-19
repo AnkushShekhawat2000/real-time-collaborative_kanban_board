@@ -248,13 +248,7 @@ export const moveTask = async ({
                     data: {
                         columnId: destinationColumnId,
                         position: -(destinationTasks.length + 1),
-                        version: { increment: 1 },
                     },
-                });
-            } else {
-                await tx.task.update({
-                    where: { id: taskId },
-                    data: { version: { increment: 1 } },
                 });
             }
 
@@ -265,7 +259,10 @@ export const moveTask = async ({
             for (let i = 0; i < sourceFinal.length; i++) {
                 await tx.task.update({
                     where: { id: sourceFinal[i].id },
-                    data: { position: i },
+                    data: {
+                        position: i,
+                        version: { increment: 1 },
+                    },
                 });
             }
 
@@ -273,7 +270,10 @@ export const moveTask = async ({
                 for (let i = 0; i < newDestination.length; i++) {
                     await tx.task.update({
                         where: { id: newDestination[i].id },
-                        data: { position: i },
+                        data: {
+                            position: i,
+                            version: { increment: 1 },
+                        },
                     });
                 }
             }
@@ -289,4 +289,115 @@ export const moveTask = async ({
             isolationLevel: "Serializable",
         }
     );
+};
+
+export const assignTask = async ({
+    taskId,
+    columnId,
+    tenantId,
+    assigneeId,
+}) => {
+    return prisma.$transaction(async (tx) => {
+        const task = await tx.task.findFirst({
+            where: {
+                id: taskId,
+                columnId,
+                column: {
+                    board: {
+                        tenantId,
+                    },
+                },
+            },
+        });
+
+        if (!task) {
+            return { status: "TASK_NOT_FOUND" };
+        }
+
+        const membership = await tx.membership.findFirst({
+            where: {
+                tenantId,
+                userId: assigneeId,
+            },
+        });
+
+        if (!membership) {
+            return { status: "INVALID_ASSIGNEE" };
+        }
+
+        const result = await tx.task.updateMany({
+            where: {
+                id: taskId,
+                columnId,
+                version: task.version,
+            },
+            data: {
+                assigneeId,
+                version: { increment: 1 },
+            },
+        });
+
+        if (result.count === 0) {
+            return { status: "CONFLICT" };
+        }
+
+        return {
+            status: "SUCCESS",
+            task: await tx.task.findUnique({
+                where: { id: taskId },
+                include: {
+                    assignee: {
+                        select: {
+                            id: true,
+                            name: true,
+                            email: true,
+                        },
+                    },
+                },
+            }),
+        };
+    });
+};
+
+export const unassignTask = async ({
+    taskId,
+    columnId,
+    tenantId,
+}) => {
+    const task = await prisma.task.findFirst({
+        where: {
+            id: taskId,
+            columnId,
+            column: {
+                board: { tenantId },
+            },
+        },
+    });
+
+    if (!task) {
+        return { status: "TASK_NOT_FOUND" };
+    }
+
+    const result = await prisma.task.updateMany({
+        where: {
+            id: taskId,
+            columnId,
+            version: task.version,
+        },
+        data: {
+            assigneeId: null,
+            version: { increment: 1 },
+        },
+    });
+
+    if (!result.count) {
+        return { status: "CONFLICT" };
+    }
+
+    return {
+        status: "SUCCESS",
+        task: await prisma.task.findUnique({
+            where: { id: taskId },
+        }),
+    };
 };
