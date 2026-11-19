@@ -1,6 +1,13 @@
 import * as taskService from "../services/task.service.js";
+import { createActivity } from "../services/activity.service.js";
 
 const priorities = ["LOW", "MEDIUM", "HIGH", "URGENT"];
+
+const emitTaskEvent = (req, event, data) => {
+    req.app.get("io")
+        .to(`tenant:${req.tenant.id}`)
+        .emit(event, data);
+};
 
 export const createTaskController = async (req, res) => {
     try {
@@ -60,6 +67,20 @@ export const createTaskController = async (req, res) => {
             priority,
             dueDate: parsedDueDate,
         });
+
+        await createActivity({
+            tenantId: req.tenant.id,
+            userId: req.user.userId,
+            action: "TASK_CREATED",
+            entityType: "TASK",
+            entityId: task.id,
+            details: {
+                title: task.title,
+                columnId: req.column.id,
+            },
+        });
+
+        emitTaskEvent(req, "task:created", task);
 
         return res.status(201).json({
             success: true,
@@ -230,6 +251,8 @@ export const updateTaskController = async (req, res) => {
             });
         }
 
+        emitTaskEvent(req, "task:updated", task);
+
         return res.status(200).json({
             success: true,
             message: "Task updated successfully",
@@ -258,6 +281,11 @@ export const deleteTaskController = async (req, res) => {
                 message: "Task not found",
             });
         }
+
+        emitTaskEvent(req, "task:deleted", {
+            id: req.params.taskId,
+            columnId: req.column.id,
+        });
 
         return res.status(200).json({
             success: true,
@@ -316,6 +344,25 @@ export const moveTaskController = async (req, res) => {
                 message: "Task was changed by another user. Refresh and retry.",
             });
         }
+
+        await createActivity({
+            tenantId: req.tenant.id,
+            userId: req.user.userId,
+            action: "TASK_MOVED",
+            entityType: "TASK",
+            entityId: result.task.id,
+            details: {
+                sourceColumnId: req.column.id,
+                destinationColumnId,
+                taskTitle: result.task.title,
+            },
+        });
+
+        emitTaskEvent(req, "task:moved", {
+            ...result.task,
+            sourceColumnId: req.column.id,
+            destinationColumnId,
+        });
 
         return res.status(200).json({
             success: true,
@@ -437,6 +484,20 @@ export const assignTaskController = async (req, res) => {
             });
         }
 
+        await createActivity({
+            tenantId: req.tenant.id,
+            userId: req.user.userId,
+            action: "TASK_ASSIGNED",
+            entityType: "TASK",
+            entityId: result.task.id,
+            details: {
+                assigneeId: result.task.assigneeId,
+                taskTitle: result.task.title,
+            },
+        });
+
+        emitTaskEvent(req, "task:assigned", result.task);
+
         return res.status(200).json({
             success: true,
             message: "Task assigned successfully",
@@ -473,6 +534,8 @@ export const unassignTaskController = async (req, res) => {
                 message: "Task changed. Refresh and retry.",
             });
         }
+
+        emitTaskEvent(req, "task:assigned", result.task);
 
         return res.status(200).json({
             success: true,

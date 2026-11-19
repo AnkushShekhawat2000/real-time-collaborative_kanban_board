@@ -66,3 +66,10 @@ Task updates increment `version`; stale `expectedVersion` values receive HTTP 40
 ## Activity API
 
 - `GET /api/activities/:tenantId?page=1&limit=20` lists tenant activity logs. The authenticated user must have access to that tenant.
+- Creating, assigning, and moving tasks writes `TASK_CREATED`, `TASK_ASSIGNED`, and `TASK_MOVED` activity records. The Prisma `metadata` field stores the supplied activity details.
+
+## Real-time updates
+
+The server starts Socket.IO on the same port as the HTTP API. Connect with the JWT in `auth.token`, then emit `tenant:join` with a tenant ID. Tenant members and organization admins can join authorized tenant rooms.
+
+The server broadcasts `presence:updated` and task events (`task:created`, `task:updated`, `task:moved`, `task:deleted`, and `task:assigned`) to clients in that tenant room. Set `CLIENT_URL` to the frontend origin; it defaults to `http://localhost:5173`.
