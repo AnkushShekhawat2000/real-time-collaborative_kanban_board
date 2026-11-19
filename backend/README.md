@@ -37,3 +37,14 @@ Prisma 7 uses the PostgreSQL driver adapter configured in `src/config/prisma.js`
 - `DELETE /api/boards/:tenantId/:boardId` deletes a board and its related columns and tasks.
 
 Every board service query is scoped by `tenantId`; members can view boards but cannot create, update, or delete them.
+
+## Column APIs
+
+- `POST /api/columns` creates a column for the board and tenant IDs in the request body.
+- `GET /api/columns/:tenantId/:boardId` lists columns and their ordered tasks.
+- `GET /api/columns/:tenantId/:boardId/:columnId` fetches one column.
+- `PUT /api/columns/:tenantId/:boardId/:columnId` updates a column name.
+- `DELETE /api/columns/:tenantId/:boardId/:columnId` deletes a column and cascades to its tasks.
+- `PATCH /api/columns/:tenantId/:boardId/reorder` reorders all columns using a `columnIds` array.
+
+All endpoints require tenant and board access; only organization and tenant admins can modify columns.
