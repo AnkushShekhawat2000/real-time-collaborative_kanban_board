@@ -68,6 +68,7 @@ const TaskModal = ({
                         value={form.description}
                         onChange={handleChange}
                         placeholder="Describe your task"
+                        maxLength={2000}
                     />
 
                     <label htmlFor="task-priority">Priority</label>

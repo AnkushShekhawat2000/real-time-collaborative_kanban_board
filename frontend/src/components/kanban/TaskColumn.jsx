@@ -39,9 +39,12 @@ const SortableTask = (props) => {
 const TaskColumn = ({
     column,
     onAddTask,
+    onDeleteColumn,
     onEditTask,
     onDeleteTask,
     onOpenTask,
+    onRenameColumn,
+    canManageBoard,
 }) => {
     const { setNodeRef, isOver } = useDroppable({ id: column.id });
     const tasks = column.tasks || [];
@@ -56,10 +59,31 @@ const TaskColumn = ({
                     <h3>{column.name}</h3>
                     <span>{tasks.length} tasks</span>
                 </div>
-                <button type="button" onClick={() => onAddTask(column.id)}>
-                    + Add
-                </button>
+                {canManageBoard && (
+                    <div className="column-admin-actions">
+                        <button
+                            type="button"
+                            onClick={() => onRenameColumn(column)}
+                        >
+                            Rename
+                        </button>
+                        <button
+                            type="button"
+                            className="danger-button"
+                            onClick={() => onDeleteColumn(column)}
+                        >
+                            Delete
+                        </button>
+                    </div>
+                )}
             </div>
+            <button
+                className="column-create-task"
+                type="button"
+                onClick={() => onAddTask(column.id)}
+            >
+                + Create Task
+            </button>
 
             <SortableContext
                 items={tasks.map((task) => task.id)}

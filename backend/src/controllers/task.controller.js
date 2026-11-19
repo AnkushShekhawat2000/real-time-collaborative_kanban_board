@@ -1,7 +1,13 @@
 import * as taskService from "../services/task.service.js";
-import { createActivity } from "../services/activity.service.js";
+import {
+    createTaskSchema,
+    updateTaskSchema,
+} from "../validators/task.validator.js";
 
-const priorities = ["LOW", "MEDIUM", "HIGH", "URGENT"];
+const formatValidationErrors = (error) => error.issues.map((issue) => ({
+    path: issue.path.join("."),
+    message: issue.message,
+}));
 
 const emitTaskEvent = (req, event, data) => {
     req.app.get("io")
@@ -16,73 +22,30 @@ const emitTaskEvent = (req, event, data) => {
 
 export const createTaskController = async (req, res) => {
     try {
+        const validation = createTaskSchema.safeParse(req.body || {});
+
+        if (!validation.success) {
+            return res.status(400).json({
+                success: false,
+                message: "Task validation failed",
+                errors: formatValidationErrors(validation.error),
+            });
+        }
+
         const {
             title,
             description,
-            priority = "MEDIUM",
+            priority,
             dueDate,
-        } = req.body || {};
-
-        if (
-            typeof title !== "string" ||
-            title.trim().length < 2 ||
-            title.trim().length > 200
-        ) {
-            return res.status(400).json({
-                success: false,
-                message: "Title must be 2-200 characters",
-            });
-        }
-
-        if (!priorities.includes(priority)) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid priority",
-            });
-        }
-
-        if (
-            description !== undefined &&
-            description !== null &&
-            typeof description !== "string"
-        ) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid description",
-            });
-        }
-
-        let parsedDueDate;
-
-        if (dueDate !== undefined && dueDate !== null) {
-            parsedDueDate = new Date(dueDate);
-
-            if (Number.isNaN(parsedDueDate.getTime())) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Invalid due date",
-                });
-            }
-        }
-
+        } = validation.data;
         const task = await taskService.createTask({
             columnId: req.column.id,
-            title: title.trim(),
+            title,
             description,
             priority,
-            dueDate: parsedDueDate,
-        });
-
-        await createActivity({
+            dueDate: dueDate ? new Date(dueDate) : undefined,
             tenantId: req.tenant.id,
             userId: req.user.userId,
-            action: "TASK_CREATED",
-            entityType: "TASK",
-            entityId: task.id,
-            details: {
-                title: task.title,
-                columnId: req.column.id,
-            },
         });
 
         emitTaskEvent(req, "task:created", task);
@@ -94,6 +57,13 @@ export const createTaskController = async (req, res) => {
         });
     } catch (error) {
         console.error(error);
+
+        if (error.code === "P2034" || error.code === "P2002") {
+            return res.status(409).json({
+                success: false,
+                message: "Task order changed concurrently. Refresh and retry.",
+            });
+        }
 
         return res.status(500).json({
             success: false,
@@ -151,88 +121,40 @@ export const getTaskController = async (req, res) => {
 
 export const updateTaskController = async (req, res) => {
     try {
+        const validation = updateTaskSchema.safeParse(req.body || {});
+
+        if (!validation.success) {
+            return res.status(400).json({
+                success: false,
+                message: "Task validation failed",
+                errors: formatValidationErrors(validation.error),
+            });
+        }
+
         const {
             title,
             description,
             priority,
             dueDate,
             expectedVersion,
-        } = req.body || {};
-
-        if (
-            !Number.isInteger(expectedVersion) ||
-            expectedVersion < 1
-        ) {
-            return res.status(400).json({
-                success: false,
-                message: "Valid expectedVersion is required",
-            });
-        }
+        } = validation.data;
 
         const data = {};
 
         if (title !== undefined) {
-            if (
-                typeof title !== "string" ||
-                title.trim().length < 2 ||
-                title.trim().length > 200
-            ) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Invalid title",
-                });
-            }
-
-            data.title = title.trim();
+            data.title = title;
         }
 
         if (description !== undefined) {
-            if (
-                description !== null &&
-                typeof description !== "string"
-            ) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Invalid description",
-                });
-            }
-
             data.description = description;
         }
 
         if (priority !== undefined) {
-            if (!priorities.includes(priority)) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Invalid priority",
-                });
-            }
-
             data.priority = priority;
         }
 
         if (dueDate !== undefined) {
-            if (dueDate === null) {
-                data.dueDate = null;
-            } else {
-                const parsed = new Date(dueDate);
-
-                if (Number.isNaN(parsed.getTime())) {
-                    return res.status(400).json({
-                        success: false,
-                        message: "Invalid due date",
-                    });
-                }
-
-                data.dueDate = parsed;
-            }
-        }
-
-        if (Object.keys(data).length === 0) {
-            return res.status(400).json({
-                success: false,
-                message: "No task fields provided",
-            });
+            data.dueDate = dueDate === null ? null : new Date(dueDate);
         }
 
         const task = await taskService.updateTask({
@@ -278,15 +200,35 @@ export const updateTaskController = async (req, res) => {
 
 export const deleteTaskController = async (req, res) => {
     try {
-        const deleted = await taskService.deleteTask(
-            req.column.id,
-            req.params.taskId
-        );
+        const { expectedVersion } = req.body || {};
 
-        if (!deleted) {
+        if (!Number.isInteger(expectedVersion) || expectedVersion < 1) {
+            return res.status(400).json({
+                success: false,
+                message: "A valid expectedVersion is required",
+            });
+        }
+
+        const result = await taskService.deleteTask({
+            columnId: req.column.id,
+            taskId: req.params.taskId,
+            tenantId: req.tenant.id,
+            userId: req.user.userId,
+            expectedVersion,
+        });
+
+        if (result.status === "NOT_FOUND") {
             return res.status(404).json({
                 success: false,
                 message: "Task not found",
+            });
+        }
+
+        if (result.status === "CONFLICT") {
+            return res.status(409).json({
+                success: false,
+                code: "VERSION_CONFLICT",
+                message: "Task changed before deletion. Refresh and retry.",
             });
         }
 
@@ -337,6 +279,8 @@ export const moveTaskController = async (req, res) => {
             destinationPosition,
             expectedVersion,
             boardId: req.board.id,
+            tenantId: req.tenant.id,
+            userId: req.user.userId,
         });
 
         if (result.status === "NOT_FOUND") {
@@ -352,19 +296,6 @@ export const moveTaskController = async (req, res) => {
                 message: "Task was changed by another user. Refresh and retry.",
             });
         }
-
-        await createActivity({
-            tenantId: req.tenant.id,
-            userId: req.user.userId,
-            action: "TASK_MOVED",
-            entityType: "TASK",
-            entityId: result.task.id,
-            details: {
-                sourceColumnId: req.column.id,
-                destinationColumnId,
-                taskTitle: result.task.title,
-            },
-        });
 
         emitTaskEvent(req, "task:moved", {
             ...result.task,
@@ -412,6 +343,8 @@ export const reorderTasksController = async (req, res) => {
             boardId: req.board.id,
             columnId: req.column.id,
             taskIds,
+            tenantId: req.tenant.id,
+            userId: req.user.userId,
         });
 
         if (tasks === null) {
@@ -427,6 +360,11 @@ export const reorderTasksController = async (req, res) => {
                 message: "Task IDs must exactly match this column's tasks",
             });
         }
+
+        emitTaskEvent(req, "task:reordered", {
+            columnId: req.column.id,
+            taskIds: tasks.map((task) => task.id),
+        });
 
         return res.status(200).json({
             success: true,
@@ -469,6 +407,7 @@ export const assignTaskController = async (req, res) => {
             columnId: req.column.id,
             tenantId: req.tenant.id,
             assigneeId,
+            userId: req.user.userId,
         });
 
         if (result.status === "TASK_NOT_FOUND") {
@@ -491,18 +430,6 @@ export const assignTaskController = async (req, res) => {
                 message: "Task changed during assignment. Refresh and retry.",
             });
         }
-
-        await createActivity({
-            tenantId: req.tenant.id,
-            userId: req.user.userId,
-            action: "TASK_ASSIGNED",
-            entityType: "TASK",
-            entityId: result.task.id,
-            details: {
-                assigneeId: result.task.assigneeId,
-                taskTitle: result.task.title,
-            },
-        });
 
         emitTaskEvent(req, "task:assigned", result.task);
 
@@ -527,6 +454,7 @@ export const unassignTaskController = async (req, res) => {
             taskId: req.params.taskId,
             columnId: req.column.id,
             tenantId: req.tenant.id,
+            userId: req.user.userId,
         });
 
         if (result.status === "TASK_NOT_FOUND") {

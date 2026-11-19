@@ -31,6 +31,8 @@ export const createColumn = async ({
                 position,
             },
         });
+    }, {
+        isolationLevel: "Serializable",
     });
 };
 
@@ -41,6 +43,15 @@ export const getColumns = async (boardId) => {
         include: {
             tasks: {
                 orderBy: { position: "asc" },
+                include: {
+                    assignee: {
+                        select: {
+                            id: true,
+                            name: true,
+                            email: true,
+                        },
+                    },
+                },
             },
         },
     });

@@ -5,6 +5,60 @@ import { socketAuth } from "./socketAuth.js";
 
 const tenantUsers = new Map();
 
+const removePresence = (io, tenantId, userId) => {
+    const users = tenantUsers.get(tenantId);
+
+    if (!users || !users.has(userId)) {
+        return;
+    }
+
+    const user = users.get(userId);
+    user.count -= 1;
+
+    if (user.count <= 0) {
+        users.delete(userId);
+    }
+
+    if (users.size === 0) {
+        tenantUsers.delete(tenantId);
+    }
+
+    io.to(`tenant:${tenantId}`).emit(
+        "presence:updated",
+        Array.from(users?.values() || []).map(({ id, name }) => ({
+            id,
+            name,
+        }))
+    );
+};
+
+export const revokeTenantUserAccess = async (io, tenantId, userId) => {
+    const room = `tenant:${tenantId}`;
+    const sockets = await io.in(room).fetchSockets();
+
+    for (const socket of sockets) {
+        if (socket.user.id === userId) {
+            socket.emit("tenant:access-revoked", { tenantId });
+            await socket.leave(room);
+            removePresence(io, tenantId, userId);
+        }
+    }
+};
+
+export const revokeTenantRoom = async (io, tenantId) => {
+    const room = `tenant:${tenantId}`;
+    const sockets = await io.in(room).fetchSockets();
+
+    io.to(room).emit("tenant:deleted", { tenantId });
+
+    for (const socket of sockets) {
+        await socket.leave(room);
+    }
+
+    tenantUsers.delete(tenantId);
+    io.to(room).emit("presence:updated", []);
+};
+
 export const initializeSocket = (httpServer) => {
     const io = new Server(httpServer, {
         cors: {
@@ -45,7 +99,10 @@ export const initializeSocket = (httpServer) => {
                         userId: socket.user.id,
                         organizationId: tenant.organizationId,
                         OR: [
-                            { tenantId },
+                            {
+                                tenantId,
+                                role: { in: ["TENANT_ADMIN", "MEMBER"] },
+                            },
                             {
                                 tenantId: null,
                                 role: "ORG_ADMIN",
@@ -64,11 +121,28 @@ export const initializeSocket = (httpServer) => {
                 const room = `tenant:${tenantId}`;
 
                 if (socket.rooms.has(room)) {
+                    const users = tenantUsers.get(tenantId);
+                    socket.emit(
+                        "presence:updated",
+                        Array.from(users?.values() || []).map(
+                            ({ id, name }) => ({ id, name })
+                        )
+                    );
                     return callback?.({
                         success: true,
                         message: "Tenant room already joined",
                         tenantId,
                     });
+                }
+
+                for (const existingRoom of [...socket.rooms]) {
+                    if (existingRoom.startsWith("tenant:")) {
+                        const previousTenantId = existingRoom.slice(
+                            "tenant:".length
+                        );
+                        await socket.leave(existingRoom);
+                        removePresence(io, previousTenantId, socket.user.id);
+                    }
                 }
 
                 await socket.join(room);
@@ -124,7 +198,7 @@ export const initializeSocket = (httpServer) => {
             }
 
             await socket.leave(room);
-            removePresence(tenantId, socket.user.id);
+            removePresence(io, tenantId, socket.user.id);
 
             callback?.({ success: true });
         });
@@ -135,6 +209,7 @@ export const initializeSocket = (httpServer) => {
             for (const room of socket.rooms) {
                 if (room.startsWith("tenant:")) {
                     removePresence(
+                        io,
                         room.slice("tenant:".length),
                         socket.user.id
                     );
@@ -142,33 +217,6 @@ export const initializeSocket = (httpServer) => {
             }
         });
     });
-
-    function removePresence(tenantId, userId) {
-        const users = tenantUsers.get(tenantId);
-
-        if (!users || !users.has(userId)) {
-            return;
-        }
-
-        const user = users.get(userId);
-        user.count -= 1;
-
-        if (user.count <= 0) {
-            users.delete(userId);
-        }
-
-        if (users.size === 0) {
-            tenantUsers.delete(tenantId);
-        }
-
-        io.to(`tenant:${tenantId}`).emit(
-            "presence:updated",
-            Array.from(users?.values() || []).map(({ id, name }) => ({
-                id,
-                name,
-            }))
-        );
-    }
 
     return io;
 };

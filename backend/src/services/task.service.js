@@ -1,4 +1,5 @@
 import prisma from "../config/prisma.js";
+import { statusForColumn } from "./taskStatus.js";
 
 export const createTask = async ({
     columnId,
@@ -6,33 +7,64 @@ export const createTask = async ({
     description,
     priority,
     dueDate,
-}) => {
-    return prisma.$transaction(async (tx) => {
-        const lastTask = await tx.task.findFirst({
-            where: { columnId },
-            orderBy: { position: "desc" },
-            select: { position: true },
-        });
+    tenantId,
+    userId,
+}) => prisma.$transaction(async (tx) => {
+        const [lastTask, column] = await Promise.all([
+            tx.task.findFirst({
+                where: { columnId },
+                orderBy: { position: "desc" },
+                select: { position: true },
+            }),
+            tx.column.findUnique({
+                where: { id: columnId },
+                select: { name: true },
+            }),
+        ]);
 
-        return tx.task.create({
+        const task = await tx.task.create({
             data: {
                 columnId,
                 title,
                 description,
                 priority,
                 dueDate,
+                status: statusForColumn(column.name),
+                createdById: userId,
                 position: lastTask
                     ? lastTask.position + 1
                     : 0,
             },
         });
+
+        await tx.activityLog.create({
+            data: {
+                tenantId,
+                userId,
+                action: "TASK_CREATED",
+                entityType: "TASK",
+                entityId: task.id,
+                metadata: {
+                    title: task.title,
+                    columnId,
+                },
+            },
+        });
+
+        return task;
+    }, {
+        isolationLevel: "Serializable",
     });
-};
 
 export const getTasks = async (columnId) => {
     return prisma.task.findMany({
         where: { columnId },
         orderBy: { position: "asc" },
+        include: {
+            assignee: {
+                select: { id: true, name: true, email: true },
+            },
+        },
     });
 };
 
@@ -41,6 +73,11 @@ export const getTask = async (columnId, taskId) => {
         where: {
             id: taskId,
             columnId,
+        },
+        include: {
+            assignee: {
+                select: { id: true, name: true, email: true },
+            },
         },
     });
 };
@@ -94,6 +131,11 @@ export const updateTask = async ({
                 id: taskId,
                 columnId,
             },
+            include: {
+                assignee: {
+                    select: { id: true, name: true, email: true },
+                },
+            },
         });
 
         await tx.activityLog.create({
@@ -122,21 +164,55 @@ export const updateTask = async ({
     });
 };
 
-export const deleteTask = async (columnId, taskId) => {
-    const result = await prisma.task.deleteMany({
-        where: {
-            id: taskId,
-            columnId,
-        },
-    });
+export const deleteTask = async ({
+    columnId,
+    taskId,
+    tenantId,
+    userId,
+    expectedVersion,
+}) => {
+    return prisma.$transaction(async (tx) => {
+        const task = await tx.task.findFirst({
+            where: { id: taskId, columnId },
+        });
 
-    return result.count > 0;
+        if (!task) {
+            return { status: "NOT_FOUND" };
+        }
+
+        const result = await tx.task.deleteMany({
+            where: {
+                id: taskId,
+                columnId,
+                version: expectedVersion,
+            },
+        });
+
+        if (result.count !== 1) {
+            return { status: "CONFLICT" };
+        }
+
+        await tx.activityLog.create({
+            data: {
+                tenantId,
+                userId,
+                action: "TASK_DELETED",
+                entityType: "TASK",
+                entityId: taskId,
+                metadata: { title: task.title, columnId },
+            },
+        });
+
+        return { status: "SUCCESS", task };
+    });
 };
 
 export const reorderTasks = async ({
     boardId,
     columnId,
     taskIds,
+    tenantId,
+    userId,
 }) => {
     return prisma.$transaction(
         async (tx) => {
@@ -181,10 +257,23 @@ export const reorderTasks = async ({
                 });
             }
 
-            return tx.task.findMany({
+            const tasks = await tx.task.findMany({
                 where: { columnId },
                 orderBy: { position: "asc" },
             });
+
+            await tx.activityLog.create({
+                data: {
+                    tenantId,
+                    userId,
+                    action: "TASKS_REORDERED",
+                    entityType: "COLUMN",
+                    entityId: columnId,
+                    metadata: { taskIds },
+                },
+            });
+
+            return tasks;
         },
         {
             isolationLevel: "Serializable",
@@ -199,6 +288,8 @@ export const moveTask = async ({
     destinationPosition,
     expectedVersion,
     boardId,
+    tenantId,
+    userId,
 }) => {
     return prisma.$transaction(
         async (tx) => {
@@ -283,6 +374,10 @@ export const moveTask = async ({
                     data: {
                         columnId: destinationColumnId,
                         position: -(destinationTasks.length + 1),
+                        status: statusForColumn(
+                            destination.name,
+                            task.status
+                        ),
                     },
                 });
             }
@@ -313,11 +408,28 @@ export const moveTask = async ({
                 }
             }
 
+            const updatedTask = await tx.task.findUnique({
+                where: { id: taskId },
+            });
+
+            await tx.activityLog.create({
+                data: {
+                    tenantId,
+                    userId,
+                    action: "TASK_MOVED",
+                    entityType: "TASK",
+                    entityId: taskId,
+                    metadata: {
+                        sourceColumnId,
+                        destinationColumnId,
+                        title: updatedTask.title,
+                    },
+                },
+            });
+
             return {
                 status: "SUCCESS",
-                task: await tx.task.findUnique({
-                    where: { id: taskId },
-                }),
+                task: updatedTask,
             };
         },
         {
@@ -331,6 +443,7 @@ export const assignTask = async ({
     columnId,
     tenantId,
     assigneeId,
+    userId,
 }) => {
     return prisma.$transaction(async (tx) => {
         const task = await tx.task.findFirst({
@@ -376,20 +489,32 @@ export const assignTask = async ({
             return { status: "CONFLICT" };
         }
 
+        const updatedTask = await tx.task.findUnique({
+            where: { id: taskId },
+            include: {
+                assignee: {
+                    select: { id: true, name: true, email: true },
+                },
+            },
+        });
+
+        await tx.activityLog.create({
+            data: {
+                tenantId,
+                userId,
+                action: "TASK_ASSIGNED",
+                entityType: "TASK",
+                entityId: taskId,
+                metadata: {
+                    assigneeId,
+                    title: task.title,
+                },
+            },
+        });
+
         return {
             status: "SUCCESS",
-            task: await tx.task.findUnique({
-                where: { id: taskId },
-                include: {
-                    assignee: {
-                        select: {
-                            id: true,
-                            name: true,
-                            email: true,
-                        },
-                    },
-                },
-            }),
+            task: updatedTask,
         };
     });
 };
@@ -398,41 +523,57 @@ export const unassignTask = async ({
     taskId,
     columnId,
     tenantId,
+    userId,
 }) => {
-    const task = await prisma.task.findFirst({
-        where: {
-            id: taskId,
-            columnId,
-            column: {
-                board: { tenantId },
+    return prisma.$transaction(async (tx) => {
+        const task = await tx.task.findFirst({
+            where: {
+                id: taskId,
+                columnId,
+                column: {
+                    board: { tenantId },
+                },
             },
-        },
-    });
+        });
 
-    if (!task) {
-        return { status: "TASK_NOT_FOUND" };
-    }
+        if (!task) {
+            return { status: "TASK_NOT_FOUND" };
+        }
 
-    const result = await prisma.task.updateMany({
-        where: {
-            id: taskId,
-            columnId,
-            version: task.version,
-        },
-        data: {
-            assigneeId: null,
-            version: { increment: 1 },
-        },
-    });
+        const result = await tx.task.updateMany({
+            where: {
+                id: taskId,
+                columnId,
+                version: task.version,
+            },
+            data: {
+                assigneeId: null,
+                version: { increment: 1 },
+            },
+        });
 
-    if (!result.count) {
-        return { status: "CONFLICT" };
-    }
+        if (!result.count) {
+            return { status: "CONFLICT" };
+        }
 
-    return {
-        status: "SUCCESS",
-        task: await prisma.task.findUnique({
+        const updatedTask = await tx.task.findUnique({
             where: { id: taskId },
-        }),
-    };
+        });
+
+        await tx.activityLog.create({
+            data: {
+                tenantId,
+                userId,
+                action: "TASK_UNASSIGNED",
+                entityType: "TASK",
+                entityId: taskId,
+                metadata: {
+                    assigneeId: task.assigneeId,
+                    title: task.title,
+                },
+            },
+        });
+
+        return { status: "SUCCESS", task: updatedTask };
+    });
 };

@@ -13,8 +13,8 @@ import {
 } from "../socket/socket.js";
 
 export const RealtimeProvider = ({ children }) => {
-    const { user } = useAuth();
-    const { selectedTenant } = useWorkspace();
+    const { user, refreshUser } = useAuth();
+    const { selectedTenant, selectTenant } = useWorkspace();
     const [connectedTenantId, setConnectedTenantId] = useState(null);
     const [presence, setPresence] = useState({
         tenantId: null,
@@ -47,12 +47,12 @@ export const RealtimeProvider = ({ children }) => {
         };
 
         const handleConnect = () => {
-            setConnectedTenantId(tenantId);
             joinTenant();
         };
 
         const handleDisconnect = () => {
             setConnectedTenantId(null);
+            setPresence({ tenantId: null, users: [] });
         };
 
         const handleConnectError = (error) => {
@@ -62,11 +62,23 @@ export const RealtimeProvider = ({ children }) => {
         const handlePresenceUpdate = (users) => {
             setPresence({ tenantId, users });
         };
+        const handleAccessRevoked = (event) => {
+            if (event.tenantId !== tenantId) {
+                return;
+            }
+
+            setConnectedTenantId(null);
+            setPresence({ tenantId: null, users: [] });
+            selectTenant(null);
+            void refreshUser();
+        };
 
         socket.on("connect", handleConnect);
         socket.on("disconnect", handleDisconnect);
         socket.on("connect_error", handleConnectError);
         socket.on("presence:updated", handlePresenceUpdate);
+        socket.on("tenant:access-revoked", handleAccessRevoked);
+        socket.on("tenant:deleted", handleAccessRevoked);
 
         if (socket.connected) {
             joinTenant();
@@ -77,12 +89,14 @@ export const RealtimeProvider = ({ children }) => {
             socket.off("disconnect", handleDisconnect);
             socket.off("connect_error", handleConnectError);
             socket.off("presence:updated", handlePresenceUpdate);
+            socket.off("tenant:access-revoked", handleAccessRevoked);
+            socket.off("tenant:deleted", handleAccessRevoked);
 
             if (socket.connected) {
                 socket.emit("tenant:leave", tenantId);
             }
         };
-    }, [selectedTenant?.id, user?.id]);
+    }, [refreshUser, selectTenant, selectedTenant?.id, user?.id]);
 
     useEffect(() => () => {
         disconnectSocket();

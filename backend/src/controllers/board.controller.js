@@ -6,6 +6,17 @@ import {
     deleteBoard,
 } from "../services/board.service.js";
 
+const emitBoardEvent = (req, event, boardId, data = {}) => {
+    req.app.get("io")
+        .to(`tenant:${req.tenant.id}`)
+        .emit(event, {
+            ...data,
+            tenantId: req.tenant.id,
+            boardId,
+            actorId: req.user.userId,
+        });
+};
+
 export const createBoardController = async (req, res) => {
     try {
         const { name, description } = req.body || {};
@@ -37,6 +48,8 @@ export const createBoardController = async (req, res) => {
             name: name.trim(),
             description,
         });
+
+        emitBoardEvent(req, "board:created", board.id, { name: board.name });
 
         return res.status(201).json({
             success: true,
@@ -148,6 +161,8 @@ export const updateBoardController = async (req, res) => {
             });
         }
 
+        emitBoardEvent(req, "board:updated", board.id, { name: board.name });
+
         return res.status(200).json({
             success: true,
             message: "Board updated successfully",
@@ -176,6 +191,12 @@ export const deleteBoardController = async (req, res) => {
                 message: "Board not found",
             });
         }
+
+        emitBoardEvent(
+            req,
+            "board:deleted",
+            req.params.boardId
+        );
 
         return res.status(200).json({
             success: true,

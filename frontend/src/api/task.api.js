@@ -10,6 +10,38 @@ export const getColumns = async (tenantId, boardId) => {
     return response.data.columns || [];
 };
 
+export const createColumn = async (tenantId, boardId, name) => {
+    const response = await api.post("/columns", {
+        tenantId,
+        boardId,
+        name,
+    });
+    return response.data.column;
+};
+
+export const updateColumn = async ({
+    tenantId,
+    boardId,
+    columnId,
+}, name) => {
+    const response = await api.put(
+        `/columns/${tenantId}/${boardId}/${columnId}`,
+        { name }
+    );
+    return response.data.column;
+};
+
+export const deleteColumn = async ({
+    tenantId,
+    boardId,
+    columnId,
+}) => {
+    const response = await api.delete(
+        `/columns/${tenantId}/${boardId}/${columnId}`
+    );
+    return response.data;
+};
+
 export const createTask = async (data) => {
     const response = await api.post("/tasks", data);
     return response.data.task;
@@ -34,9 +66,10 @@ export const deleteTask = async ({
     boardId,
     columnId,
     taskId,
-}) => {
+}, expectedVersion) => {
     const response = await api.delete(
-        `/tasks/${tenantId}/${boardId}/${columnId}/${taskId}`
+        `/tasks/${tenantId}/${boardId}/${columnId}/${taskId}`,
+        { data: { expectedVersion } }
     );
 
     return response.data;
@@ -51,6 +84,33 @@ export const moveTask = async ({
     const response = await api.patch(
         `/tasks/${tenantId}/${boardId}/${sourceColumnId}/${taskId}/move`,
         data
+    );
+
+    return response.data.task;
+};
+
+export const assignTask = async ({
+    tenantId,
+    boardId,
+    columnId,
+    taskId,
+}, assigneeId) => {
+    const response = await api.patch(
+        `/tasks/${tenantId}/${boardId}/${columnId}/${taskId}/assign`,
+        { assigneeId }
+    );
+
+    return response.data.task;
+};
+
+export const unassignTask = async ({
+    tenantId,
+    boardId,
+    columnId,
+    taskId,
+}) => {
+    const response = await api.patch(
+        `/tasks/${tenantId}/${boardId}/${columnId}/${taskId}/unassign`
     );
 
     return response.data.task;

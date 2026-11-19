@@ -1,5 +1,16 @@
 import * as columnService from "../services/column.service.js";
 
+const emitColumnEvent = (req, event, data = {}) => {
+    req.app.get("io")
+        .to(`tenant:${req.tenant.id}`)
+        .emit(event, {
+            ...data,
+            tenantId: req.tenant.id,
+            boardId: req.board.id,
+            actorId: req.user.userId,
+        });
+};
+
 export const createColumnController = async (req, res) => {
     try {
         const { name } = req.body || {};
@@ -27,6 +38,10 @@ export const createColumnController = async (req, res) => {
             });
         }
 
+        emitColumnEvent(req, "column:created", {
+            columnId: column.id,
+        });
+
         return res.status(201).json({
             success: true,
             message: "Column created successfully",
@@ -34,6 +49,13 @@ export const createColumnController = async (req, res) => {
         });
     } catch (error) {
         console.error(error);
+
+        if (error.code === "P2034" || error.code === "P2002") {
+            return res.status(409).json({
+                success: false,
+                message: "Column order changed concurrently. Refresh and retry.",
+            });
+        }
 
         return res.status(500).json({
             success: false,
@@ -74,6 +96,11 @@ export const getColumnController = async (req, res) => {
                 message: "Column not found",
             });
         }
+
+        emitColumnEvent(req, "column:updated", {
+            columnId: column.id,
+            name: column.name,
+        });
 
         return res.status(200).json({
             success: true,
@@ -146,6 +173,10 @@ export const deleteColumnController = async (req, res) => {
             });
         }
 
+        emitColumnEvent(req, "column:deleted", {
+            columnId: req.params.columnId,
+        });
+
         return res.status(200).json({
             success: true,
             message: "Column deleted successfully",
@@ -178,6 +209,10 @@ export const reorderColumnsController = async (req, res) => {
             req.board.id,
             columnIds
         );
+
+        emitColumnEvent(req, "column:reordered", {
+            columnIds: columns.map((column) => column.id),
+        });
 
         return res.status(200).json({
             success: true,

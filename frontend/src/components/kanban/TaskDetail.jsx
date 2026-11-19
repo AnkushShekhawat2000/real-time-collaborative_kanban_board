@@ -4,7 +4,14 @@ import {
     X,
 } from "lucide-react";
 
-const TaskDetail = ({ task, onClose }) => {
+const TaskDetail = ({
+    task,
+    members,
+    assigning,
+    error,
+    onAssign,
+    onClose,
+}) => {
     if (!task) {
         return null;
     }
@@ -32,6 +39,10 @@ const TaskDetail = ({ task, onClose }) => {
                 </div>
 
                 <div className="detail-field">
+                    <span>Status: {task.status?.replace("_", " ") || "TODO"}</span>
+                </div>
+
+                <div className="detail-field">
                     <Calendar size={18} />
                     <span>
                         Due Date: {task.dueDate
@@ -43,6 +54,28 @@ const TaskDetail = ({ task, onClose }) => {
                 <div className="detail-field">
                     <span>Column: {task.column?.name || "Not available"}</span>
                 </div>
+                <div className="detail-field">
+                    <label htmlFor="task-assignee">Assignee</label>
+                    <select
+                        id="task-assignee"
+                        value={task.assigneeId || ""}
+                        disabled={assigning}
+                        onChange={(event) => {
+                            void onAssign(event.target.value || null);
+                        }}
+                    >
+                        <option value="">Unassigned</option>
+                        {members.map((membership) => (
+                            <option
+                                key={membership.user.id}
+                                value={membership.user.id}
+                            >
+                                {membership.user.name} ({membership.role})
+                            </option>
+                        ))}
+                    </select>
+                </div>
+                {error && <p className="error-message">{error}</p>}
                 <div className="detail-field">
                     <span>Task ID: {task.id}</span>
                 </div>

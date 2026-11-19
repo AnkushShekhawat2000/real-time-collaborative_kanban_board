@@ -5,12 +5,37 @@ export const createBoard = async ({
     name,
     description,
 }) => {
-    return prisma.board.create({
-        data: {
-            tenantId,
-            name,
-            description,
-        },
+    return prisma.$transaction(async (tx) => {
+        const board = await tx.board.create({
+            data: {
+                tenantId,
+                name,
+                description,
+            },
+        });
+
+        await tx.column.createMany({
+            data: [
+                { name: "To Do", position: 0 },
+                { name: "In Progress", position: 1 },
+                { name: "Done", position: 2 },
+            ].map((column) => ({
+                ...column,
+                boardId: board.id,
+            })),
+        });
+
+        return tx.board.findFirst({
+            where: {
+                id: board.id,
+                tenantId,
+            },
+            include: {
+                columns: {
+                    orderBy: { position: "asc" },
+                },
+            },
+        });
     });
 };
 
@@ -47,6 +72,15 @@ export const getBoard = async (tenantId, boardId) => {
                     tasks: {
                         orderBy: {
                             position: "asc",
+                        },
+                        include: {
+                            assignee: {
+                                select: {
+                                    id: true,
+                                    name: true,
+                                    email: true,
+                                },
+                            },
                         },
                     },
                 },

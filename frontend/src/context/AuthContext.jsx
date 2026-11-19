@@ -1,4 +1,5 @@
 import {
+    useCallback,
     useEffect,
     useState,
 } from "react";
@@ -69,6 +70,38 @@ export const AuthProvider = ({ children }) => {
         return response.data;
     };
 
+    const register = async (name, email, password) => {
+        const response = await api.post("/auth/register", {
+            name,
+            email,
+            password,
+        });
+
+        const token = response.data.token || response.data.data?.token;
+
+        if (token) {
+            localStorage.setItem("token", token);
+
+            let currentUser = getUser(response.data);
+
+            if (!currentUser) {
+                const meResponse = await api.get("/auth/me");
+                currentUser = getUser(meResponse.data);
+            }
+
+            setUser(currentUser);
+        }
+
+        return response.data;
+    };
+
+    const refreshUser = useCallback(async () => {
+        const response = await api.get("/auth/me");
+        const currentUser = getUser(response.data);
+        setUser(currentUser);
+        return currentUser;
+    }, []);
+
     const logout = () => {
         localStorage.removeItem("token");
         setUser(null);
@@ -81,6 +114,8 @@ export const AuthProvider = ({ children }) => {
                 user,
                 loading,
                 login,
+                register,
+                refreshUser,
                 logout,
                 isAuthenticated: Boolean(user),
             }}
