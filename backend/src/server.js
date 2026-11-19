@@ -6,6 +6,7 @@ import cors from "cors";
 import prisma from "./config/prisma.js";
 import authRoutes from "./routes/auth.routes.js";
 import tenantRoutes from "./routes/tenant.routes.js";
+import boardRoutes from "./routes/board.routes.js";
 
 const app = express();
 
@@ -13,6 +14,7 @@ app.use(cors());
 app.use(express.json());
 app.use("/api/auth", authRoutes);
 app.use("/api/tenants", tenantRoutes);
+app.use("/api/boards", boardRoutes);
 
 app.get("/api/health", (req, res) => {
     res.status(200).json({

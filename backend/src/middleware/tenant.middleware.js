@@ -49,7 +49,7 @@ export const verifyTenantAccess = async (req, res, next) => {
         if (!organizationMembership && !tenantMembership) {
             return res.status(403).json({
                 success: false,
-                message: "You do not have access to this tenant",
+                message: "Access denied for this tenant",
             });
         }
 

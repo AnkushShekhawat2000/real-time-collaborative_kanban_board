@@ -27,3 +27,13 @@ Prisma 7 uses the PostgreSQL driver adapter configured in `src/config/prisma.js`
 - `POST /api/tenants` creates a tenant. It requires a bearer token and an organization-level `ORG_ADMIN` membership (`tenantId: null`). The tenant slug is generated from its name.
 - `GET /api/tenants/organization/:organizationId` lists tenants when the authenticated user has a membership in that organization.
 - `verifyTenantAccess` and `allowRoles` are available for protecting tenant-scoped routes. Tenant admins and members are limited to tenants where they have a membership; organization admins are scoped to their organization.
+
+## Board APIs
+
+- `POST /api/boards` creates a board for the `tenantId` in the request body. Organization admins and tenant admins can create boards.
+- `GET /api/boards/:tenantId` lists boards in an authorized tenant.
+- `GET /api/boards/:tenantId/:boardId` returns a board with its ordered columns and tasks.
+- `PUT /api/boards/:tenantId/:boardId` updates a board.
+- `DELETE /api/boards/:tenantId/:boardId` deletes a board and its related columns and tasks.
+
+Every board service query is scoped by `tenantId`; members can view boards but cannot create, update, or delete them.

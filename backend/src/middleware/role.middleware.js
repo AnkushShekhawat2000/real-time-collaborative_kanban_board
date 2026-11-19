@@ -3,14 +3,14 @@ export const allowRoles = (...allowedRoles) => {
         if (!req.membership) {
             return res.status(403).json({
                 success: false,
-                message: "Membership not found",
+                message: "Membership required",
             });
         }
 
         if (!allowedRoles.includes(req.membership.role)) {
             return res.status(403).json({
                 success: false,
-                message: "You don't have permission for this action",
+                message: "You don't have permission",
             });
         }
 
