@@ -55,6 +55,8 @@ All endpoints require tenant and board access; only organization and tenant admi
 - `GET /api/tasks/:tenantId/:boardId/:columnId` lists a column's tasks by position.
 - `GET /api/tasks/:tenantId/:boardId/:columnId/:taskId` fetches one task.
 - `PATCH /api/tasks/:tenantId/:boardId/:columnId/:taskId` updates task fields and requires the current `expectedVersion`.
+- `PATCH /api/tasks/:tenantId/:boardId/:columnId/:taskId/move` moves a task to a column on the same board. The body requires `destinationColumnId`, `destinationPosition`, and the current `expectedVersion`.
+- `PATCH /api/tasks/:tenantId/:boardId/:columnId/reorder` reorders every task in a column using a `taskIds` array containing exactly those tasks.
 - `DELETE /api/tasks/:tenantId/:boardId/:columnId/:taskId` deletes a task.
 
-Task updates increment `version`; stale `expectedVersion` values receive HTTP 409.
+Task updates and moves increment `version`; stale `expectedVersion` values receive HTTP 409. Reordering also increments each task's version.

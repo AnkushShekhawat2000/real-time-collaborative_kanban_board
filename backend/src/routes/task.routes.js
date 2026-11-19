@@ -12,6 +12,8 @@ import {
     getTaskController,
     updateTaskController,
     deleteTaskController,
+    moveTaskController,
+    reorderTasksController,
 } from "../controllers/task.controller.js";
 
 const router = express.Router();
@@ -39,6 +41,18 @@ router.get(
     "/:tenantId/:boardId/:columnId/:taskId",
     verifyHierarchy,
     getTaskController
+);
+
+router.patch(
+    "/:tenantId/:boardId/:columnId/reorder",
+    verifyHierarchy,
+    reorderTasksController
+);
+
+router.patch(
+    "/:tenantId/:boardId/:columnId/:taskId/move",
+    verifyHierarchy,
+    moveTaskController
 );
 
 router.patch(

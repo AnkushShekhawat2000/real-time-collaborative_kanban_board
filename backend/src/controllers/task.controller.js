@@ -272,3 +272,125 @@ export const deleteTaskController = async (req, res) => {
         });
     }
 };
+
+export const moveTaskController = async (req, res) => {
+    try {
+        const {
+            destinationColumnId,
+            destinationPosition,
+            expectedVersion,
+        } = req.body || {};
+
+        if (
+            typeof destinationColumnId !== "string" ||
+            !Number.isInteger(destinationPosition) ||
+            destinationPosition < 0 ||
+            !Number.isInteger(expectedVersion) ||
+            expectedVersion < 1
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid movement data",
+            });
+        }
+
+        const result = await taskService.moveTask({
+            taskId: req.params.taskId,
+            sourceColumnId: req.column.id,
+            destinationColumnId,
+            destinationPosition,
+            expectedVersion,
+            boardId: req.board.id,
+        });
+
+        if (result.status === "NOT_FOUND") {
+            return res.status(404).json({
+                success: false,
+                message: "Task or destination column not found",
+            });
+        }
+
+        if (result.status === "CONFLICT") {
+            return res.status(409).json({
+                success: false,
+                message: "Task was changed by another user. Refresh and retry.",
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Task moved successfully",
+            task: result.task,
+        });
+    } catch (error) {
+        console.error("Move task error:", error);
+
+        if (error.code === "P2034") {
+            return res.status(409).json({
+                success: false,
+                message: "Concurrent movement detected. Refresh and retry.",
+            });
+        }
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to move task",
+        });
+    }
+};
+
+export const reorderTasksController = async (req, res) => {
+    try {
+        const { taskIds } = req.body || {};
+
+        if (
+            !Array.isArray(taskIds) ||
+            !taskIds.every((id) => typeof id === "string")
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Valid taskIds array is required",
+            });
+        }
+
+        const tasks = await taskService.reorderTasks({
+            boardId: req.board.id,
+            columnId: req.column.id,
+            taskIds,
+        });
+
+        if (tasks === null) {
+            return res.status(404).json({
+                success: false,
+                message: "Column not found",
+            });
+        }
+
+        if (tasks === "INVALID_ORDER") {
+            return res.status(400).json({
+                success: false,
+                message: "Task IDs must exactly match this column's tasks",
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Tasks reordered successfully",
+            tasks,
+        });
+    } catch (error) {
+        console.error("Reorder tasks error:", error);
+
+        if (error.code === "P2034") {
+            return res.status(409).json({
+                success: false,
+                message: "Concurrent reorder detected. Refresh and retry.",
+            });
+        }
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to reorder tasks",
+        });
+    }
+};
