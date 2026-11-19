@@ -238,6 +238,8 @@ export const updateTaskController = async (req, res) => {
         const task = await taskService.updateTask({
             taskId: req.params.taskId,
             columnId: req.column.id,
+            tenantId: req.tenant.id,
+            userId: req.user.userId,
             expectedVersion,
             data,
         });
@@ -245,6 +247,7 @@ export const updateTaskController = async (req, res) => {
         if (task === "CONFLICT") {
             return res.status(409).json({
                 success: false,
+                code: "VERSION_CONFLICT",
                 message: "Task was modified by another user. Refresh and retry.",
             });
         }

@@ -75,12 +75,14 @@ const BoardPage = () => {
             );
             setBoardKey(requestKey);
             setLoadedKey(requestKey);
+            return true;
         } catch (requestError) {
             setLoadedKey(requestKey);
             setError(
                 requestError.response?.data?.message ||
                 "Failed to load board"
             );
+            return false;
         } finally {
             setRefreshing(false);
         }
@@ -214,6 +216,21 @@ const BoardPage = () => {
             setEditingTask(null);
             await loadBoard();
         } catch (requestError) {
+            if (
+                requestError.response?.status === 409 ||
+                requestError.response?.data?.code === "VERSION_CONFLICT"
+            ) {
+                setModalOpen(false);
+                setEditingTask(null);
+                const refreshed = await loadBoard();
+                setError(
+                    refreshed
+                        ? "Task changed by another user. Latest data is loaded; reopen the task to review and edit."
+                        : "Task changed by another user, but the latest board could not be loaded."
+                );
+                return;
+            }
+
             setError(
                 requestError.response?.data?.message ||
                 "Unable to save task"

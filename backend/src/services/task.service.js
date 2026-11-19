@@ -48,10 +48,29 @@ export const getTask = async (columnId, taskId) => {
 export const updateTask = async ({
     taskId,
     columnId,
+    tenantId,
+    userId,
     expectedVersion,
     data,
 }) => {
     return prisma.$transaction(async (tx) => {
+        const existingTask = await tx.task.findFirst({
+            where: {
+                id: taskId,
+                columnId,
+            },
+            select: {
+                title: true,
+                description: true,
+                priority: true,
+                dueDate: true,
+            },
+        });
+
+        if (!existingTask) {
+            return null;
+        }
+
         const result = await tx.task.updateMany({
             where: {
                 id: taskId,
@@ -66,24 +85,40 @@ export const updateTask = async ({
             },
         });
 
-        if (result.count === 0) {
-            const existing = await tx.task.findFirst({
-                where: {
-                    id: taskId,
-                    columnId,
-                },
-                select: { id: true },
-            });
-
-            return existing ? "CONFLICT" : null;
+        if (result.count !== 1) {
+            return "CONFLICT";
         }
 
-        return tx.task.findFirst({
+        const updatedTask = await tx.task.findFirst({
             where: {
                 id: taskId,
                 columnId,
             },
         });
+
+        await tx.activityLog.create({
+            data: {
+                tenantId,
+                userId,
+                action: "TASK_UPDATED",
+                entityType: "TASK",
+                entityId: taskId,
+                metadata: {
+                    old: {
+                        ...existingTask,
+                        dueDate: existingTask.dueDate?.toISOString() || null,
+                    },
+                    new: {
+                        title: updatedTask.title,
+                        description: updatedTask.description,
+                        priority: updatedTask.priority,
+                        dueDate: updatedTask.dueDate?.toISOString() || null,
+                    },
+                },
+            },
+        });
+
+        return updatedTask;
     });
 };
 
