@@ -48,3 +48,13 @@ Every board service query is scoped by `tenantId`; members can view boards but c
 - `PATCH /api/columns/:tenantId/:boardId/reorder` reorders all columns using a `columnIds` array.
 
 All endpoints require tenant and board access; only organization and tenant admins can modify columns.
+
+## Task APIs
+
+- `POST /api/tasks` creates a task for the tenant, board, and column IDs in the request body.
+- `GET /api/tasks/:tenantId/:boardId/:columnId` lists a column's tasks by position.
+- `GET /api/tasks/:tenantId/:boardId/:columnId/:taskId` fetches one task.
+- `PATCH /api/tasks/:tenantId/:boardId/:columnId/:taskId` updates task fields and requires the current `expectedVersion`.
+- `DELETE /api/tasks/:tenantId/:boardId/:columnId/:taskId` deletes a task.
+
+Task updates increment `version`; stale `expectedVersion` values receive HTTP 409.

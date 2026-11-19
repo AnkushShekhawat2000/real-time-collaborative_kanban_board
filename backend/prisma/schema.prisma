@@ -18,6 +18,13 @@ enum TaskStatus {
   DONE
 }
 
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
 model Organization {
   id          String       @id @default(cuid())
   name        String
@@ -100,17 +107,20 @@ model Column {
 }
 
 model Task {
-  id          String     @id @default(cuid())
+  id          String       @id @default(cuid())
   title       String
   description String?
-  status      TaskStatus @default(TODO)
+  status      TaskStatus   @default(TODO)
+  priority    TaskPriority @default(MEDIUM)
+  dueDate     DateTime?
   position    Int
+  version     Int          @default(1)
   columnId    String
   createdById String?
-  column      Column     @relation(fields: [columnId], references: [id], onDelete: Cascade)
-  createdBy   User?      @relation("TaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  column      Column       @relation(fields: [columnId], references: [id], onDelete: Cascade)
+  createdBy   User?        @relation("TaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 
   @@index([columnId, position])
   @@index([createdById])
