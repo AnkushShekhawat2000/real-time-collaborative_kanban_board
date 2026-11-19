@@ -21,6 +21,7 @@ import {
     updateTask,
 } from "../api/task.api.js";
 import { useWorkspace } from "../context/useWorkspace.js";
+import { useRealtime } from "../context/useRealtime.js";
 import TaskColumn from "../components/kanban/TaskColumn.jsx";
 import TaskDetail from "../components/kanban/TaskDetail.jsx";
 import TaskModal from "../components/kanban/TaskModal.jsx";
@@ -28,6 +29,7 @@ import TaskModal from "../components/kanban/TaskModal.jsx";
 const BoardPage = () => {
     const { boardId } = useParams();
     const { selectedTenant } = useWorkspace();
+    const { connected, onlineUsers, socket } = useRealtime();
     const [board, setBoard] = useState(null);
     const [columns, setColumns] = useState([]);
     const [loadedKey, setLoadedKey] = useState(null);
@@ -131,6 +133,41 @@ const BoardPage = () => {
             active = false;
         };
     }, [boardId, requestKey, selectedTenant]);
+
+    useEffect(() => {
+        if (!socket) {
+            return undefined;
+        }
+
+        const handleTaskChange = (event) => {
+            if (
+                event.tenantId !== selectedTenant?.id ||
+                event.boardId !== boardId
+            ) {
+                return;
+            }
+
+            void loadBoard();
+        };
+
+        const handleReconnect = () => {
+            void loadBoard();
+        };
+
+        socket.on("task:created", handleTaskChange);
+        socket.on("task:updated", handleTaskChange);
+        socket.on("task:moved", handleTaskChange);
+        socket.on("task:deleted", handleTaskChange);
+        socket.on("connect", handleReconnect);
+
+        return () => {
+            socket.off("task:created", handleTaskChange);
+            socket.off("task:updated", handleTaskChange);
+            socket.off("task:moved", handleTaskChange);
+            socket.off("task:deleted", handleTaskChange);
+            socket.off("connect", handleReconnect);
+        };
+    }, [boardId, loadBoard, selectedTenant?.id, socket]);
 
     const handleAddTask = (columnId) => {
         setEditingTask(null);
@@ -339,7 +376,11 @@ const BoardPage = () => {
                 <div>
                     <Link to="/dashboard">Back to workspace</Link>
                     <h1>{board?.name || "Kanban Board"}</h1>
-                    <p>Manage your team&apos;s tasks</p>
+                    <p>
+                        {connected
+                            ? `${onlineUsers.length} team members online`
+                            : "Connecting to real-time updates..."}
+                    </p>
                 </div>
                 <button
                     type="button"

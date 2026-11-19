@@ -1,10 +1,13 @@
 import { Outlet } from "react-router-dom";
 
 import { WorkspaceProvider } from "../context/WorkspaceContext.jsx";
+import { RealtimeProvider } from "../context/RealtimeContext.jsx";
 
 const WorkspaceLayout = () => (
     <WorkspaceProvider>
-        <Outlet />
+        <RealtimeProvider>
+            <Outlet />
+        </RealtimeProvider>
     </WorkspaceProvider>
 );
 

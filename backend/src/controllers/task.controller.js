@@ -6,7 +6,12 @@ const priorities = ["LOW", "MEDIUM", "HIGH", "URGENT"];
 const emitTaskEvent = (req, event, data) => {
     req.app.get("io")
         .to(`tenant:${req.tenant.id}`)
-        .emit(event, data);
+        .emit(event, {
+            ...data,
+            tenantId: req.tenant.id,
+            boardId: req.board.id,
+            actorId: req.user.userId,
+        });
 };
 
 export const createTaskController = async (req, res) => {
