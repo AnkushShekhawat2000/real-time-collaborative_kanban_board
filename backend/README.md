@@ -21,3 +21,9 @@
 
 The initial migration creates the eight Prisma models: Organization, Tenant, User, Membership, Board, Column, Task, and ActivityLog.
 Prisma 7 uses the PostgreSQL driver adapter configured in `src/config/prisma.js`; the connection URL is loaded by `prisma.config.js` and `.env`.
+
+## Tenant APIs
+
+- `POST /api/tenants` creates a tenant. It requires a bearer token and an organization-level `ORG_ADMIN` membership (`tenantId: null`). The tenant slug is generated from its name.
+- `GET /api/tenants/organization/:organizationId` lists tenants when the authenticated user has a membership in that organization.
+- `verifyTenantAccess` and `allowRoles` are available for protecting tenant-scoped routes. Tenant admins and members are limited to tenants where they have a membership; organization admins are scoped to their organization.
